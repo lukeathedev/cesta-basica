@@ -1,0 +1,757 @@
+---
+title: "PESQUISA DA VARIAÇÃO DO VALOR DA CESTA BÁSICA EM LONDRINA-PR"
+subtitle: Referência de Outubro - 2020
+output:
+  pdf_document:
+    citation_package: natbib
+    includes:
+      in_header: ../assets/header.tex
+  html_document:
+    df_print: paged
+header-includes:
+- \usepackage{float}
+- \floatplacement{figure}{H}
+- \usepackage{graphicx}
+- \usepackage{fancyhdr}
+- \pagestyle{fancy}
+- \fancyhf{}
+- \renewcommand{\headrulewidth}{0pt}
+- \fancyhead[C]{\includegraphics[width=13cm]{../assets/img/header.png}}
+- \fancyfoot[C]{\includegraphics[width=15cm]{../assets/img/footer.png}}
+- \setlength{\footskip}{39.51785pt}
+- \fancypagestyle{plain}{\pagestyle{fancy}}
+- \geometry{head=35pt, includehead=true, includefoot=true}
+- \usepackage{pagecolor}
+- \usepackage{xcolor}
+- \definecolor{mycol}{RGB}{230,230,230}
+- \pagecolor{mycol}
+classoption: a4paper
+---
+
+```{r, include=FALSE}
+## CONFIGURAÇÕES NO R
+options(OutDec = ",",knitr.kable.NA='',digits=2)
+knitr::opts_chunk$set(warning = F, message = F)
+## PACOTES
+pkg <- c("readr","readxl","lubridate","stringr","dplyr","knitr","ggplot2","gganimate","gifski","grid","magick","scales","plotly")
+sapply(pkg, require, character.only=TRUE)
+
+```
+
+```{r include=FALSE}
+# Leitura de dados (planilhas)
+
+library(readxl)
+
+xlspath <- "../input.xlsx"
+imgpath <- "../assets/img"
+
+## Cesta atual
+cesta_atl <- read_excel(xlspath,
+                        sheet = "atual")[1:15,]
+
+## Cesta anterior
+cesta_ant <- read_excel(xlspath,
+                        sheet = "anterior")
+
+cesta_basica <- read_excel(xlspath,
+                          skip=21, sheet = "atual")[1:14, 1:3]
+
+salario_min_atl <- read_excel(xlspath,
+                              skip=17, sheet= "atual")[1:2, 1:3]
+salario_min_ant <- read_excel(xlspath,
+                              skip=17, sheet= "anterior")[1:2, 1:3]
+
+# Temporario
+Prod <- read_excel(xlspath, 
+                   sheet = "sorted")
+```
+
+```{r include=FALSE}
+# Cálculos
+
+data_ant <- "set/2020"
+data_atl <- "out/2020"
+  
+## Valores
+vlr_ant <- as.numeric(cesta_ant[15, 15])
+vlr_ant_familia <- vlr_ant * 3
+vlr_atl <- as.numeric(cesta_atl[15, 15])
+vlr_atl_familia <- vlr_atl * 3
+nonzero <- which(cesta_atl[15, 3:14] != 0)
+vlr_super_min <- (min(unlist(cesta_atl[15, 3:14])[nonzero]))
+vlr_super_min <- as.numeric(gsub(",", ".", vlr_super_min))
+vlr_super_max <- (max(unlist(cesta_atl[15, 3:14])[nonzero]))
+vlr_super_max <- as.numeric(gsub(",", ".", vlr_super_max))
+
+## Preços consolidados
+pcl_min_atl <- as.numeric(cesta_atl[15, 17])
+pcl_med_atl <- as.numeric(cesta_atl[15, 15])
+pcl_max_atl <- as.numeric(cesta_atl[15, 16])
+
+pcl_med_ant <- as.numeric(cesta_ant[15, 15])
+
+## Variações
+var_mm <- as.numeric(cesta_atl[15, "Var MM%"])
+var_min_med <- (pcl_med_atl - pcl_min_atl) / pcl_med_atl
+var_super_min_med <- (pcl_med_atl - vlr_super_min) / pcl_med_atl
+var_super_max_med <- (vlr_super_max - pcl_med_atl) / pcl_med_atl
+var_super_max_min <- (vlr_super_max - vlr_super_min) / vlr_super_min
+var_cesta_ano <- (as.numeric(cesta_basica[14, 2]) / as.numeric(cesta_basica[2, 2])) - 1
+var_cesta_jan <- (as.numeric(cesta_basica[14, 2]) / as.numeric(cesta_basica[1, 2])) - 1
+
+# Percentual da jornada paranaense
+var_pct_jornada_set <- pcl_med_ant / as.numeric(salario_min_ant[2,2])
+var_pct_jornada_out <- pcl_med_atl / as.numeric(salario_min_atl[2,2])
+var_pct_jornada_pr_set <- pcl_med_ant / as.numeric(salario_min_ant[1,2])
+var_pct_jornada_pr_out <- pcl_med_atl / as.numeric(salario_min_atl[1,2])
+
+## Produtos
+prods <- cesta_atl[1:13, 20:21]
+var_prod_max <- max(prods$`Var MM%`, na.rm = TRUE)
+var_prod_min <- min(prods$`Var MM%`, na.rm = TRUE)
+
+val_carne_med_atl <- as.numeric(cesta_atl[6, 15])
+val_carne_med_ant <- as.numeric(cesta_ant[6, 15])
+nonzero <- which(cesta_atl[6, 3:14] != 0)
+val_carne_min_atl <- (min(unlist(cesta_atl[6, 3:14])[nonzero]))
+val_carne_min_atl <- as.numeric(gsub(",", ".", val_carne_min_atl))
+val_carne_max_atl <- (max(unlist(cesta_atl[6, 3:14])[nonzero]))
+val_carne_max_atl <- as.numeric(gsub(",", ".", val_carne_max_atl))
+
+pcl_carne_med <- as.numeric(cesta_atl[6, 2]) * val_carne_med_atl
+
+pct_carne_med <- pcl_carne_med / pcl_med_atl
+var_carne_med <- as.numeric(cesta_atl[6, 20])
+```
+
+```{r include=FALSE}
+reducao <- Prod$`Produtos resumido`[Prod$`Var MM%`< -0.01]
+igual <- Prod$`Produtos resumido`[abs(Prod$`Var MM%`)<= 0.01]
+aumento <- Prod$`Produtos resumido`[Prod$`Var MM%`> 0.01]
+```
+
+
+# Introdução
+
+:::::: {.cols data-latex=""}
+::: {.col data-latex="{0.45\textwidth}"}
+
+O Objetivo desta pesquisa é identificar a variação de preços ocorrida na cidade de Londrina, sobre os produtos que compõe a cesta básica, que é definida pelo Decreto 399 de 1938 e que continua em vigência. Levantamento realizado em 31 de outubro, nas 11 redes supermercadistas que atuam em Londrina, considerando unidades
+
+
+:::
+
+
+::: {.col data-latex="{0.1\textwidth}"}
+\ 
+<!-- Um espaço entre colunas -->
+:::
+
+
+::: {.col data-latex="{0.45\textwidth}"}
+
+nos quatro pontos cardeais e mais o centro da cidade, com os 13 produtos que compõem a cesta básica. São levantados os preços dos produtos que apresentam o menor valor e não são consideradas as marcas. Série histórica iniciada em maio de 2001 pelo professor Flavio de Oliveira Santos.  
+
+:::
+::::::
+
+
+# Resultados
+
+## Levantamento em outubro de 2020
+
+\vspace{5mm}
+
+:::::: {.cols data-latex=""}
+::: {.col data-latex="{0.45\textwidth}"}
+
+
+O valor da cesta básica calculada pela média destes 11 supermercados apresentou `r ifelse(vlr_atl > vlr_ant, "aumento", "redução")` de **`r round(abs(var_mm * 100), 1)`\%** em comparação com o mês anterior, cujo
+:::
+
+::: {.col data-latex="{0.1\textwidth}"}
+\ 
+<!-- Um espaço entre colunas -->
+:::
+
+
+::: {.col data-latex="{0.45\textwidth}"}
+levantamento apontava o valor médio de **R\$ `r vlr_ant`** (`r data_ant`).
+
+:::
+::::::
+
+\vspace{7mm}
+
+\begin{center}
+\bf{\color{red}{VALORES DA CESTA}}
+\end{center}  
+
+
+
+:::::: {.cols data-latex=""}
+::: {.col data-latex="{0.2\textwidth}"}
+\ 
+<!-- Um espaço entre colunas -->
+:::
+
+
+::: {.col data-latex="{0.2\textwidth}"}
+
+
+```{r, out.width = "70px",echo=F}
+knitr::include_graphics(str_c(imgpath, "/img1.png"))
+```
+:::
+
+::: {.col data-latex="{0.5\textwidth}"}
+
+\vspace{-6mm}
+
+\begin{center}
+Para uma pessoa adulta:
+\vspace{.5mm}
+
+\bf{R\$`r  vlr_atl`}
+\end{center}
+
+\vspace{3mm}
+
+\begin{center}
+Para uma Família (dois adultos e duas crianças):
+
+\vspace{0.5mm}
+
+\bf{R\$`r  vlr_atl_familia`}
+\end{center}
+
+\vspace{7mm}
+
+\begin{center}
+Variação em relação ao mês anterior:  
+\vspace{.5mm}
+
+\bf{`r  round(var_mm * 100, 1)`\%}  
+\end{center}
+:::
+::::::
+
+:::::: {.cols data-latex=""}
+
+::: {.col data-latex="{0.45\textwidth}"}
+
+Este é o valor médio (**R\$`r vlr_atl`**) obtido a partir dos
+preços dos onze supermercados. No entanto, se o
+consumidor se dispusesse a adquirir os produtos de
+menor preço em cada um dos supermercados
+pesquisados, conseguiria esta mesma cesta **`r  round(abs(var_min_med) * 100, 1)`\%** mais barata, ou seja, pagaria **R\$`r pcl_min_atl`**.
+
+:::
+
+
+::: {.col data-latex="{0.10\textwidth}"}
+\ 
+<!-- Um espaço entre colunas -->
+:::
+
+
+::: {.col data-latex="{0.45\textwidth}"}
+
+Mas, em uma situação mais real, se o consumidor
+comprar todas as mercadorias que compõe a cesta
+básica no supermercado que apresenta os menores
+preços pagará por ela **R\$`r vlr_super_min`**  ou **`r round(abs(var_super_min_med) * 100, 1)`\%** mais
+barato que a média, porém, se comprar naquele que
+estiver mais caro, pagará **R\$ `r vlr_super_max`**, **`r round(abs(var_super_max_med) * 100, 1)`%** mais caro
+que a média.
+
+:::
+::::::
+
+\vspace{7mm}
+
+\begin{center}
+\bf{\color{red} VARIAÇÃO DOS PREÇOS DA CESTA}
+\end{center}
+
+:::::: {.cols data-latex=""}
+::: {.col data-latex="{0.2\textwidth}"}
+\ 
+<!-- Um espaço entre colunas -->
+:::
+
+
+::: {.col data-latex="{0.2\textwidth}"}
+
+\vspace{-7mm}
+
+
+```{r, out.width = "50px",echo=F}
+knitr::include_graphics(str_c(imgpath, "/img3.png"))
+```
+
+:::
+
+::: {.col data-latex="{0.5\textwidth}"}
+
+\vspace{5mm}
+
+Menor preço de cada item:     
+
+\vspace{1mm}
+
+**R$ `r pcl_min_atl`** -> **`r  round(abs(var_min_med) * 100, 1)`%***  
+
+\vspace{15mm}
+
+Supermercado mais barato:    
+
+\vspace{1mm}
+
+**R$ `r vlr_super_min`** -> **`r round(abs(var_super_min_med) * 100, 1)`%**    
+
+\vspace{4mm}
+
+Supermercado mais caro:  
+
+\vspace{1mm}
+
+**R$ `r vlr_super_max`** -> **`r round(abs(var_super_max_med) * 100, 1)`%**    
+
+\vspace{5mm}
+
+\* Variação em relação ao valor médio.
+
+:::
+::::::
+
+\vspace{5mm}
+
+## Produtos com maior variação nos preços
+
+\vspace{5mm}
+
+
+:::::: {.cols data-latex=""}
+
+::: {.col data-latex="{0.45\textwidth}"}
+
+De todos os 13 itens que compõem a cesta básica
+nacional, `r length(aumento)` apresentaram aumento nos preços em relação ao mês anterior, foram eles: `r aumento`.
+:::
+
+::: {.col data-latex="{0.1\textwidth}"}
+\ 
+<!-- Um espaço entre colunas -->
+:::
+
+::: {.col data-latex="{0.45\textwidth}"}
+
+Permaneceu estável (variação menor que 1\%) somente `r igual` e `r length(reducao)` itens que compõe a cesta
+básica apresentaram redução nos preços, que foram: `r reducao`.
+
+:::
+::::::
+
+
+:::::: {.cols data-latex=""}
+
+::: {.col data-latex="{0.45\textwidth}"}
+
+\vspace{.5cm}
+
+\begin{center}
+\bf{Produtos com maior redução}
+\end{center}
+:::
+
+::: {.col data-latex="{0.1\textwidth}"}
+\ 
+<!-- Um espaço entre colunas -->
+:::
+
+
+::: {.col data-latex="{0.45\textwidth}"}
+
+\vspace{.5cm}
+
+\begin{center}
+\bf {Produtos com maior aumento}
+\end{center}
+
+:::
+::::::
+
+
+:::::: {.cols data-latex=""}
+
+::: {.col data-latex="{0.225\textwidth}"}
+
+```{r, echo=F}
+pr1 <- head(Prod$`Produtos resumido`,n = 3)[1] 
+vl1 <- head(Prod$`Var MM%`,n=3)[1]*100
+pr2 <- head(Prod$`Produtos resumido`,n = 3)[2] 
+vl2 <- head(Prod$`Var MM%`,n=3)[2]*100
+pr3 <- head(Prod$`Produtos resumido`,n = 3)[3] 
+vl3 <- head(Prod$`Var MM%`,n=3)[3]*100
+```
+
+\begin{center}
+
+`r pr1`  
+\vspace{.1cm}
+
+*`r round((vl1),1)`\%*
+
+\vspace{.4cm}
+
+`r pr2`    
+\vspace{.1cm}
+
+`r round((vl2),1)`\%
+\vspace{.4cm}
+
+`r pr3` 
+\vspace{.1cm}
+
+**`r round((vl3),1)`\%**
+
+\end{center}
+
+:::
+
+::: {.col data-latex="{0.225\textwidth}"}
+
+\vspace{.2cm}
+
+```{r, out.width = "50px",echo=F}
+knitr::include_graphics(str_c(imgpath, "/", pr1, ".png"))
+```
+\vspace{.2cm}
+
+```{r, out.width = "50px",echo=F}
+knitr::include_graphics(str_c(imgpath, "/", pr2, ".png"))
+```
+\vspace{.1cm}
+
+```{r, out.width = "50px",echo=F}
+knitr::include_graphics(str_c(imgpath, "/", pr3, ".png"))
+```
+
+:::
+
+
+::: {.col data-latex="{0.1\textwidth}"}
+\ 
+<!-- Um espaço entre colunas -->
+:::
+
+
+
+::: {.col data-latex="{0.225\textwidth}"}
+
+```{r, echo=F}
+pr4 <- tail(Prod$`Produtos resumido`,n = 3)[3] 
+vl4 <- tail(Prod$`Var MM%`,n=3)[3]*100
+pr5 <- tail(Prod$`Produtos resumido`,n = 3)[2] 
+vl5 <- tail(Prod$`Var MM%`,n=3)[2]*100
+pr6 <- tail(Prod$`Produtos resumido`,n = 3)[1] 
+vl6 <- tail(Prod$`Var MM%`,n=3)[1]*100
+```
+
+\vspace{.5cm}
+
+\begin{center}
+
+
+```{r, out.width = "50px",echo=F}
+knitr::include_graphics(str_c(imgpath, "/", pr4, ".png"))
+```
+\vspace{.1cm}
+
+```{r, out.width = "50px",echo=F}
+knitr::include_graphics(str_c(imgpath, "/", pr5, ".png"))
+```
+\vspace{.1cm}
+
+```{r, out.width = "50px",echo=F}
+knitr::include_graphics(str_c(imgpath, "/", pr6, ".png"))
+```
+
+\end{center}
+
+:::
+
+::: {.col data-latex="{0.20\textwidth}"}
+
+\begin{center}
+
+`r pr4`  
+\vspace{.1cm}
+
+`r round((vl4),1)`\%
+
+\vspace{.4cm}
+
+`r pr5`     
+\vspace{.1cm}
+
+`r round((vl5),1)`\%
+
+\vspace{.4cm}
+
+`r pr6`  
+\vspace{.1cm}
+
+`r round((vl6),1)`\%
+
+\end{center}
+
+
+:::
+::::::
+
+
+:::::: {.cols data-latex=""}
+::: {.col data-latex="{0.45\textwidth}"}
+
+A carne, que é o produto que tem maior peso na cesta básica (neste mês, `r round(pct_carne_med * 100, 1)`%), se manteve estável com variação igual a `r round(var_carne_med * 100, 1)`%, ou seja, menor que 1\%, ficando na média de R\$  `r val_carne_med_atl` o quilo. Lembrando que no mês passado estava a R\$ `r val_carne_med_ant` na média.
+:::
+
+::: {.col data-latex="{0.1\textwidth}"}
+\ 
+<!-- Um espaço entre colunas -->
+:::
+
+
+::: {.col data-latex="{0.45\textwidth}"}
+O preço mais barato encontrado foi de R\$ `r val_carne_min_atl` e o mais elevado de R\$ `r val_carne_max_atl`. A carne tem como referência sempre o coxão mole e se a peça tiver menor preço que fatiado é considerado o preço da peça.  
+
+:::
+::::::
+
+
+
+:::::: {.cols data-latex=""}
+
+::: {.col data-latex="{0.3\textwidth}"}
+\ 
+<!-- Um espaço entre colunas -->
+:::
+
+
+::: {.col data-latex="{0.2\textwidth}"}
+
+```{r, out.width = "80px",echo=F}
+pr7 <- as.character(str_split(sort(reorder(cesta_atl[1:13,]$Produtos,cesta_atl[1:13,]$Maior),decreasing = T)[1]," ")[[1]][1])
+vl7 <- round(Prod$`Var MM%`[Prod$`Produtos resumido`==pr7]*100,1)
+knitr::include_graphics(str_c(imgpath, "/", pr7, ".png"))
+```
+:::
+
+::: {.col data-latex="{0.1\textwidth}"}
+`r pr7`  
+**`r round(vl7,1)`%**
+:::
+
+::: {.col data-latex="{0.01\textwidth}"}
+```{r, out.width = "70px",echo=F,fig.align="left"}
+knitr::include_graphics(str_c(imgpath, "/setacima.png"))
+```
+:::
+
+::::::
+
+
+```{r, echo=FALSE,fig.align="center",out.width = "500px"}
+names(Prod)<- c("Produtos.resumido","Var.MM.")
+max <- max(Prod$Var.MM.)
+min <- min(Prod$Var.MM.)
+igual <- Prod$`Produtos resumido`[abs(Prod$Var.MM.)<= 0.01]
+aumento <- Prod$`Produtos resumido`[Prod$Var.MM.> 0.01]
+Prod$var = as.factor(ifelse(Prod$Var.MM.< -0.01, yes = -1, no = ifelse(abs(Prod$Var.MM.)<= 0.01,0,1)))
+ggplot(Prod, aes(x=reorder(Produtos.resumido, Var.MM.), y=Var.MM.)) +
+  geom_col(aes(fill=var)) +
+  coord_flip(ylim = c(min-0.1,max+0.1)) +
+ scale_fill_manual(values = c("green","orange", "red")) +
+  scale_y_continuous(labels = scales::percent) +
+  scale_x_discrete(labels= NULL)+
+  labs(y = "", x = "") +
+  geom_text(data = Prod[Prod$Var.MM. < -0.01,],
+            aes(label = factor(Produtos.resumido), size=5,y=0.1))+
+  geom_text(data=Prod[c(Prod$Var.MM.< 0.01 & Prod$Var.MM.> 0),],
+            aes(label = factor(Produtos.resumido),size=5,y=-0.1))+
+  geom_text(data=Prod[c(Prod$Var.MM.> -0.01 & Prod$Var.MM.< 0),],
+            aes(label = factor(Produtos.resumido), size=5,y=0.1))+
+  geom_text(data = Prod[Prod$Var.MM. > 0.01,],
+            aes(label = factor(Produtos.resumido),size=5,y=-0.1))+
+  geom_text(data = Prod[Prod$Var.MM. < -0.01,], 
+            aes(label=scales::percent(Var.MM.,decimal.mark = ","), size = 5, hjust=1))+
+  geom_text(data=Prod[c(Prod$Var.MM.< 0.01 & Prod$Var.MM. > 0),],             aes(label=scales::percent(Var.MM.,decimal.mark = ","), size = 5, hjust=0))+
+  geom_text(data=Prod[c(Prod$Var.MM.> -0.01 & Prod$Var.MM. < 0),],             aes(label=scales::percent(Var.MM.,decimal.mark = ","), size = 5, hjust=1))+
+  geom_text(data = Prod[Prod$Var.MM. > 0.01,], 
+            aes(label=scales::percent(Var.MM.,decimal.mark = ","), size = 5, hjust=0))+
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(size=15),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.background = element_rect(fill = "#E4E4E4",color=NA), # bg of the panel
+    plot.background = element_rect(fill = "#E4E4E4",color = NA), # bg of the plot
+    panel.grid.major = element_blank(), # get rid of major grid
+    panel.grid.minor = element_blank(), # get rid of minor grid
+    legend.background = element_rect(fill = "#E4E4E4"), # get rid of legend bg
+    legend.box.background = element_rect(fill = "#E4E4E4"), # get rid of legend panel bg
+    legend.key = element_rect(fill = "#E4E4E4"), # get rid of key legend fill, and of the surrounding
+    axis.line = element_line(colour = "#E4E4E4"))+
+  ggtitle("Variação em relação ao mês anterior")
+```
+
+
+## Comportamento dos preços sobre outubro/2020
+
+\vspace{5mm}
+
+:::::: {.cols data-latex=""}
+
+::: {.col data-latex="{0.45\textwidth}"}
+
+Quando comparado com o valor da cesta básica de outubro do ano passado, esta mostrou um aumento de `r round(var_cesta_ano * 100, 1)`%. Naquele mês ela foi adquirida 
+
+:::
+
+::: {.col data-latex="{0.1\textwidth}"}
+\ 
+<!-- Um espaço entre colunas -->
+:::
+
+::: {.col data-latex="{0.45\textwidth}"}
+
+ pelo valor médio de R\$ `r round(cesta_basica[2, 2], 2)`. Na comparação com os preços praticados em 02 de janeiro, os preços da cesta básica apresentaram `r ifelse(var_cesta_jan > 0, "alta", "baixa")` de `r round(abs(var_cesta_jan) * 100, 1)`%.
+:::
+::::::
+
+```{r, echo=FALSE,fig.align="center",out.width = "500px"}
+Cesta3 <- read_excel(xlspath, sheet="temp2")
+Cesta3 <- Cesta3[,c(1,2,3)]
+df <- Cesta3
+df <- df[complete.cases(df),]
+lg <- nrow(df)
+df <- df[-c(lg-12:lg),]
+df$DATA <- as.Date(df$DATA)
+df$var = as.factor(ifelse(df$VARIAÇÃO > 0, yes = 1, no = 0))
+rm(lg, Cesta3)
+p2 <- ggplot(df, aes(DATA,VARIAÇÃO)) +
+  geom_col(aes(fill = var,
+               text = paste0(
+                 "Data: ", DATA, "\n",
+                 "Variação: ", scales::percent(round(VARIAÇÃO,1),decimal.mark = ","), '\n',
+                 "Valor: R$ ", round(VALOR,2), '\n'
+               )),color="black")+
+  geom_hline(yintercept = 0) +
+  guides(fill = FALSE) +
+  scale_fill_manual(values = c("firebrick", "dodgerblue4"))+
+  scale_y_continuous(labels = percent_format(decimal.mark = ",",suffix = "%"))+
+  scale_x_date(breaks=seq(min(df$DATA), max(df$DATA), by="1 month"),date_labels = "%b-%y")+
+  labs(y = "", x = "") +
+  theme(
+    legend.position = "none",
+  axis.text.x = element_text(size=8),
+    axis.text.y = element_text(size=12),
+    axis.ticks.y = element_blank(),
+    panel.background = element_rect(fill = "#E4E4E4",color=NA), # bg of the panel
+    plot.background = element_rect(fill = "#E4E4E4",color = NA), # bg of the plot
+    panel.grid.major = element_blank(), # get rid of major grid
+    panel.grid.minor = element_blank(), # get rid of minor grid
+    legend.background = element_rect(fill = "#E4E4E4"), # get rid of legend bg
+    legend.box.background = element_rect(fill = "#E4E4E4"), # get rid of legend panel bg
+    legend.key = element_rect(fill = "#E4E4E4"), # get rid of key legend fill, and of the surrounding
+    axis.line = element_line(colour = "#E4E4E4"))+
+  ggtitle("Variação mensal da cesta básica em Londrina nos últimos 12 meses")
+p2
+```
+
+## Cesta vs Salário Mínimo  
+
+\vspace{5mm}
+
+:::::: {.cols data-latex=""}
+
+::: {.col data-latex="{0.45\textwidth}"}
+
+Quando comparado o valor da cesta básica de outubro de 2020 com o mês anterior, percebe-se uma redução no poder de compra do assalariado, visto
+que a compra desta mesma cesta exigia `r round(abs(var_pct_jornada_set) * 100, 1)`% da jornada de trabalho de quem ganhava 
+:::
+
+::: {.col data-latex="{0.1\textwidth}"}
+\ 
+<!-- Um espaço entre colunas -->
+:::
+
+::: {.col data-latex="{0.45\textwidth}"}
+
+um salário mínimo nacional e este tempo subiu para `r round(abs(var_pct_jornada_out) * 100, 1)`% da jornada. Em relação ao salário mínimo paranaense, exige `r round(abs(var_pct_jornada_pr_out) * 100, 1)`% da jornada de trabalho, quando no mês passado foi de `r round(abs(var_pct_jornada_pr_set) * 100, 1)`% da jornada. 
+:::
+::::::
+
+\newpage
+  
+\begin{center}
+\bf{\color{red} Tempo necessário de trabalho para adquirir uma cesta básica}
+\end{center}
+
+:::::: {.cols data-latex=""}
+::: {.col data-latex="{0.2\textwidth}"}
+\ 
+<!-- Um espaço entre colunas -->
+:::
+
+
+::: {.col data-latex="{0.2\textwidth}"}
+
+
+```{r, out.width = "50px",echo=F}
+knitr::include_graphics(str_c(imgpath, "/parana.png"))
+```
+\vspace{5mm}
+
+```{r, out.width = "50px",echo=F}
+knitr::include_graphics(str_c(imgpath, "/brasil.png"))
+```
+:::
+
+
+::: {.col data-latex="{0.3\textwidth}"}
+
+\vspace{6mm}
+
+\centering
+
+Salário Mínimo Paranaense
+
+
+(R\$`r salario_min_atl[1,2]`)
+
+**`r 220 * var_pct_jornada_pr_out` ->  `r round(abs(var_pct_jornada_pr_out) * 100, 1)`%** 
+
+\vspace{.8cm}
+
+
+Salário Mínimo Brasileiro  
+
+(R\$`r salario_min_atl[2,2]`)
+
+**`r 220 * var_pct_jornada_out` -> `r round(abs(var_pct_jornada_out) * 100, 1)`% **    
+
+
+
+\vspace{5mm}
+
+\* Considerando uma jornada de trabalho de 220 horas mensais.
+
+
+
+:::
+
+::::::
